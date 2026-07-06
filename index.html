@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Sudoku Challenge — Free Online Sudoku Puzzles</title>
+<meta name="description" content="Play free, unlimited Sudoku puzzles online. Choose Easy, Medium, Hard, or Expert difficulty. Play today's shared Daily Challenge and see how you rank, or play unlimited Practice puzzles and beat your best time.">
+
+<!--
+  =====================================================================
+  GOOGLE ADSENSE SETUP
+  1. Sign up at https://www.google.com/adsense and get your site approved.
+  2. Replace ca-pub-XXXXXXXXXXXXXXXX below (in <head>) with your publisher ID.
+  3. Replace each data-ad-slot="XXXXXXXXXX" value with the slot ID AdSense
+     gives you when you create each ad unit.
+  4. Everything else (layout, sizing, responsiveness) is already handled.
+  See SETUP-GUIDE.md for full step-by-step instructions.
+  =====================================================================
+-->
+<!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script> -->
+
+<!--
+  =====================================================================
+  FIREBASE LEADERBOARD SETUP (optional — enables the Daily Challenge
+  leaderboard so players can see how their time ranks against everyone
+  else who solved today's puzzle)
+  1. Create a free project at https://console.firebase.google.com
+  2. Enable "Firestore Database" (production mode is fine).
+  3. In Project Settings > General, add a Web App and copy the config
+     object it gives you.
+  4. Uncomment the two <script> tags below.
+  5. Paste your config values into FIREBASE_CONFIG further down in the
+     main <script> block (search for "FIREBASE_CONFIG").
+  6. Set Firestore security rules as described in SETUP-GUIDE.md.
+  Until this is configured, the leaderboard panel will simply say it
+  isn't set up yet — everything else on the site works normally.
+  =====================================================================
+-->
+<!-- <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script> -->
+<!-- <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script> -->
+
+<style>
+  :root {
+    --bg: #1b1f2a;
+    --panel: #242a38;
+    --panel-light: #2e3547;
+    --board-bg: #f7f5ef;
+    --cell-border: #b9b3a2;
+    --box-border: #2b2b2b;
+    --text-light: #f1efe9;
+    --text-dark: #1e1e1e;
+    --accent: #ff8a3d;
+    --accent-2: #4dc9b0;
+    --given: #1e1e1e;
+    --user-num: #2166c9;
+    --error: #d64541;
+    --highlight: #ffe6b8;
+    --highlight-strong: #ffd28a;
+    --same-num: #cfe8ff;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Verdana, sans-serif;
+    background: var(--bg);
+    color: var(--text-light);
+    min-height: 100vh;
+  }
+
+  header {
+    text-align: center;
+    padding: 18px 12px 8px;
+  }
+
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 1.8rem;
+    letter-spacing: 0.5px;
+  }
+
+  header p.tag {
+    margin: 0;
+    color: #b7bccb;
+    font-size: 0.95rem;
+  }
+
+  /* ---------- Ad slots ---------- */
+  .ad-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: repeating-linear-gradient(45deg, #2a3040, #2a3040 10px, #313849 10px, #313849 20px);
+    border: 1px dashed #545e78;
+    border-radius: 8px;
+    color: #8b93a8;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 14px auto;
+    overflow: hidden;
+  }
+  .ad-slot span { opacity: 0.8; }
+  .ad-slot.top-banner { max-width: 728px; height: 90px; }
+  .ad-slot.sidebar { width: 300px; height: 250px; }
+  .ad-slot.footer-banner { max-width: 728px; height: 90px; }
+  .ad-slot.mobile-banner { display: none; width: 100%; max-width: 336px; height: 280px; }
+
+  .layout {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 12px 40px;
+    flex-wrap: wrap;
+  }
+
+  .game-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1 1 520px;
+    max-width: 520px;
+  }
+
+  .ad-column {
+    flex: 0 0 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding-top: 40px;
+  }
+
+  /* ---------- Controls ---------- */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    width: 100%;
+    margin-bottom: 6px;
+  }
+
+  select, button {
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    border: none;
+    cursor: pointer;
+    background: var(--panel-light);
+    color: var(--text-light);
+    transition: transform 0.08s ease, background 0.15s ease;
+  }
+
+  select:hover, button:hover { background: #3a4258; }
+  button:active { transform: scale(0.96); }
+
+  button.primary { background: var(--accent); color: #1e1e1e; font-weight: 600; }
+  button.primary:hover { background: #ffa564; }
+
+  .mode-toggle {
+    display: flex;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid #3a4258;
+  }
+  .mode-btn {
+    border-radius: 0;
+    background: var(--panel);
+  }
+  .mode-btn.active {
+    background: var(--accent);
+    color: #1e1e1e;
+    font-weight: 700;
+  }
+  .mode-note {
+    font-size: 0.8rem;
+    color: #9aa2b8;
+    margin: 4px 0 14px;
+    text-align: center;
+    min-height: 1.2em;
+  }
+
+  .stat-bar {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 12px;
+    font-size: 1rem;
+    color: #d7dbe6;
+  }
+  .stat-bar div span { font-weight: 700; color: var(--accent-2); }
+
+  /* ---------- Board ---------- */
+  #board {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(9, 1fr);
+    width: min(92vw, 468px);
+    height: min(92vw, 468px);
+    background: var(--board-bg);
+    border: 3px solid var(--box-border);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  .cell {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1rem, 3.6vw, 1.5rem);
+    font-weight: 500;
+    color: var(--user-num);
+    background: var(--board-bg);
+    border: 1px solid var(--cell-border);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .cell.given { color: var(--given); font-weight: 700; cursor: default; }
+  .cell.error { color: var(--error); }
+
+  .cell:nth-child(3n) { border-right: 2px solid var(--box-border); }
+  .cell:nth-child(9n+1) { border-left: 2px solid var(--box-border); }
+  .row-thick-bottom { border-bottom: 2px solid var(--box-border) !important; }
+
+  .cell.selected {
+    background: var(--highlight-strong);
+    box-shadow: inset 0 0 0 3px var(--accent);
+    z-index: 2;
+  }
+  .cell.peer { background: var(--highlight); }
+  .cell.same-num { background: var(--same-num); }
+  .cell.selected.same-num { background: var(--highlight-strong); }
+
+  .notes {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    font-size: 0.55rem;
+    color: #6b7280;
+    font-weight: 400;
+    pointer-events: none;
+  }
+  .notes div { display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- Number pad ---------- */
+  .numpad {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    gap: 6px;
+    width: min(92vw, 468px);
+    margin-top: 16px;
+  }
+  .numpad button {
+    padding: 12px 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    background: var(--panel-light);
+  }
+
+  .action-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .action-row button.active { background: var(--accent-2); color: #10231f; }
+
+  #message {
+    margin-top: 14px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent-2);
+    min-height: 1.4em;
+    text-align: center;
+  }
+
+  /* ---------- Leaderboard ---------- */
+  .leaderboard-panel {
+    width: 100%;
+    max-width: 468px;
+    background: var(--panel);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-top: 16px;
+  }
+  .leaderboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+  .leaderboard-header h3 { margin: 0; font-size: 1rem; }
+  .leaderboard-header button { padding: 4px 10px; font-size: 0.85rem; }
+  .player-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+  }
+  .player-name-row input {
+    flex: 1;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #3a4258;
+    background: var(--panel-light);
+    color: var(--text-light);
+    font-family: inherit;
+  }
+  #leaderboardList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  #leaderboardList li {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+  }
+  #leaderboardList li:nth-child(odd) { background: rgba(255,255,255,0.03); }
+  #leaderboardList li.you { background: var(--accent); color: #1e1e1e; font-weight: 700; }
+  .lb-status {
+    font-size: 0.85rem;
+    color: #9aa2b8;
+    margin: 8px 0 0;
+    text-align: center;
+  }
+
+  footer {
+    text-align: center;
+    color: #6d7488;
+    font-size: 0.8rem;
+    padding: 20px 12px 40px;
+  }
+
+  @media (max-width: 940px) {
+    .ad-column { display: none; }
+    .ad-slot.mobile-banner { display: flex; margin-top: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Daily Sudoku Challenge</h1>
+  <p class="tag">Play today's shared puzzle and see how you rank, or practice with unlimited puzzles.</p>
+</header>
+
+<!-- AD SLOT: Top leaderboard banner (728x90). Replace with your <ins class="adsbygoogle"> unit. -->
+<div class="ad-slot top-banner">
+  <span>Advertisement</span>
+  <!--
+  <ins class="adsbygoogle"
+       style="display:block"
+       data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+       data-ad-slot="XXXXXXXXXX"
+       data-ad-format="horizontal"
+       data-full-width-responsive="true"></ins>
+  <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+  -->
+</div>
+
+<div class="layout">
+  <div class="game-column">
+
+    <div class="toolbar">
+      <div class="mode-toggle">
+        <button id="dailyModeBtn" class="mode-btn active">🗓️ Daily Challenge</button>
+        <button id="practiceModeBtn" class="mode-btn">🎲 Practice</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+        <option value="expert">Expert</option>
+      </select>
+      <button class="primary" id="newGameBtn" style="display:none;">New Puzzle</button>
+    </div>
+    <p id="modeNote" class="mode-note"></p>
+
+    <div class="stat-bar">
+      <div>Time: <span id="timer">00:00</span></div>
+      <div>Best: <span id="bestTime">--:--</span></div>
+      <div>Mistakes: <span id="mistakes">0</span>/3</div>
+      <div>Hints: <span id="hintsLeft">3</span></div>
+    </div>
+
+    <div id="board"></div>
+
+    <div class="numpad" id="numpad"></div>
+
+    <div class="action-row">
+      <button id="notesBtn">✏️ Notes: Off</button>
+      <button id="eraseBtn">⌫ Erase</button>
+      <button id="hintBtn">💡 Hint</button>
+      <button id="checkBtn">✓ Check</button>
+    </div>
+
+    <div id="message"></div>
+
+    <div id="leaderboardPanel" class="leaderboard-panel">
+      <div class="leaderboard-header">
+        <h3>Today's Leaderboard — <span id="lbDifficultyLabel">Medium</span></h3>
+        <button id="refreshLbBtn">↻ Refresh</button>
+      </div>
+      <div class="player-name-row">
+        <label for="playerName">Your name:</label>
+        <input type="text" id="playerName" maxlength="20" placeholder="Anonymous">
+      </div>
+      <ol id="leaderboardList"></ol>
+      <p id="lbStatus" class="lb-status"></p>
+    </div>
+
+    <!-- AD SLOT: Mobile banner, shown only on small screens -->
+    <div class="ad-slot mobile-banner">
+      <span>Advertisement</span>
+    </div>
+
+  </div>
+
+  <div class="ad-column">
+    <!-- AD SLOT: Sidebar 300x250, desktop only -->
+    <div class="ad-slot sidebar">
+      <span>Advertisement</span>
+      <!--
+      <ins class="adsbygoogle"
+           style="display:inline-block;width:300px;height:250px"
+           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+           data-ad-slot="XXXXXXXXXX"></ins>
+      <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+      -->
+    </div>
+    <div class="ad-slot sidebar">
+      <span>Advertisement</span>
+    </div>
+  </div>
+</div>
+
+<!-- AD SLOT: Bottom banner before footer -->
+<div class="ad-slot footer-banner">
+  <span>Advertisement</span>
+</div>
+
+<footer>
+  <p>Practice best times are saved locally on your device. Daily Challenge times are shared on today's leaderboard (see SETUP-GUIDE.md to enable it).</p>
+  <p>&copy; <span id="year"></span> Daily Sudoku Challenge</p>
+</footer>
+
+<script>
+/* =========================================================
+   SUDOKU GENERATOR + SOLVER
+   (accepts an optional seeded rng so the Daily Challenge can
+   generate the identical puzzle for every player)
+   ========================================================= */
+
+function emptyGrid() {
+  return Array.from({ length: 9 }, () => Array(9).fill(0));
+}
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashStringToSeed(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function todayUTCString() {
+  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD, resets at UTC midnight
+}
+
+function shuffle(arr, rng) {
+  const rand = rng || Math.random;
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function isSafe(grid, row, col, num) {
+  for (let x = 0; x < 9; x++) {
+    if (grid[row][x] === num || grid[x][col] === num) return false;
+  }
+  const br = row - (row % 3), bc = col - (col % 3);
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      if (grid[br + r][bc + c] === num) return false;
+    }
+  }
+  return true;
+}
+
+function findEmpty(grid) {
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      if (grid[r][c] === 0) return [r, c];
+    }
+  }
+  return null;
+}
+
+function fillGrid(grid, rng) {
+  const pos = findEmpty(grid);
+  if (!pos) return true;
+  const [r, c] = pos;
+  const nums = shuffle([1,2,3,4,5,6,7,8,9], rng);
+  for (const n of nums) {
+    if (isSafe(grid, r, c, n)) {
+      grid[r][c] = n;
+      if (fillGrid(grid, rng)) return true;
+      grid[r][c] = 0;
+    }
+  }
+  return false;
+}
+
+// Counts solutions up to `limit`, stops early once reached (used to enforce uniqueness)
+function countSolutions(grid, limit = 2) {
+  let count = 0;
+  function solve(g) {
+    if (count >= limit) return;
+    const pos = findEmpty(g);
+    if (!pos) { count++; return; }
+    const [r, c] = pos;
+    for (let n = 1; n <= 9; n++) {
+      if (count >= limit) return;
+      if (isSafe(g, r, c, n)) {
+        g[r][c] = n;
+        solve(g);
+        g[r][c] = 0;
+      }
+    }
+  }
+  solve(grid.map(row => row.slice()));
+  return count;
+}
+
+function generateFullSolution(rng) {
+  const grid = emptyGrid();
+  fillGrid(grid, rng);
+  return grid;
+}
+
+const DIFFICULTY_CLUES = {
+  easy: 40,
+  medium: 32,
+  hard: 27,
+  expert: 23
+};
+
+function makePuzzle(difficulty, rng) {
+  const solution = generateFullSolution(rng);
+  const puzzle = solution.map(row => row.slice());
+  const targetClues = DIFFICULTY_CLUES[difficulty] || 32;
+  let cellsToRemove = 81 - targetClues;
+
+  const positions = shuffle(
+    Array.from({ length: 81 }, (_, i) => [Math.floor(i / 9), i % 9]),
+    rng
+  );
+
+  for (const [r, c] of positions) {
+    if (cellsToRemove <= 0) break;
+    if (puzzle[r][c] === 0) continue;
+    const backup = puzzle[r][c];
+    puzzle[r][c] = 0;
+
+    // Only enforce full uniqueness check while grid is still fairly full,
+    // to keep generation fast; falls back to accepting removal for very
+    // sparse (expert) grids after a reasonable number of checks.
+    const solCount = countSolutions(puzzle, 2);
+    if (solCount !== 1) {
+      puzzle[r][c] = backup; // revert, not safe to remove
+    } else {
+      cellsToRemove--;
+    }
+  }
+
+  return { puzzle, solution };
+}
+
+/* =========================================================
+   FIREBASE LEADERBOARD (optional)
+   Fill in FIREBASE_CONFIG and uncomment the SDK <script> tags
+   in <head> to enable. See SETUP-GUIDE.md.
+   ========================================================= */
+
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let db = null;
+let firebaseEnabled = false;
+try {
+  if (typeof firebase !== 'undefined' && FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY') {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    firebaseEnabled = true;
+  }
+} catch (e) {
+  console.warn('Firebase leaderboard not configured:', e);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function getPlayerName() {
+  try { return localStorage.getItem('sudoku_player_name') || ''; }
+  catch (e) { return ''; }
+}
+
+function setPlayerName(name) {
+  try { localStorage.setItem('sudoku_player_name', name); }
+  catch (e) { /* ignore */ }
+}
+
+async function submitScore(difficulty, secs) {
+  if (!firebaseEnabled) {
+    lbStatusEl.textContent = 'Leaderboard not set up yet — see SETUP-GUIDE.md.';
+    return;
+  }
+  const name = (playerNameInput.value || 'Anonymous').trim().slice(0, 20) || 'Anonymous';
+  setPlayerName(name);
+  const date = todayUTCString();
+  try {
+    await db.collection('sudoku_scores').add({
+      date,
+      difficulty,
+      name,
+      seconds: secs,
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    messageEl.textContent = `🎉 Solved in ${formatTime(secs)}! Your time has been submitted.`;
+    loadLeaderboard(difficulty, secs, name);
+  } catch (e) {
+    console.error(e);
+    lbStatusEl.textContent = 'Could not submit your score — check your connection or Firestore setup (see SETUP-GUIDE.md).';
+  }
+}
+
+async function loadLeaderboard(difficulty, mySeconds, myName) {
+  lbDifficultyLabelEl.textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+  if (!firebaseEnabled) {
+    leaderboardListEl.innerHTML = '';
+    lbStatusEl.textContent = 'Leaderboard not set up yet — see SETUP-GUIDE.md for free Firebase setup.';
+    return;
+  }
+  lbStatusEl.textContent = 'Loading...';
+  const date = todayUTCString();
+  try {
+    const snap = await db.collection('sudoku_scores')
+      .where('date', '==', date)
+      .where('difficulty', '==', difficulty)
+      .orderBy('seconds', 'asc')
+      .limit(50)
+      .get();
+    const rows = [];
+    snap.forEach(doc => rows.push(doc.data()));
+    leaderboardListEl.innerHTML = '';
+    if (rows.length === 0) {
+      lbStatusEl.textContent = 'No times submitted yet today — be the first!';
+    } else {
+      lbStatusEl.textContent = `${rows.length} player${rows.length === 1 ? '' : 's'} today.`;
+      rows.forEach((row, i) => {
+        const li = document.createElement('li');
+        const isMe = mySeconds !== undefined && row.seconds === mySeconds && row.name === myName;
+        if (isMe) li.classList.add('you');
+        li.innerHTML = `<span>#${i + 1} ${escapeHtml(row.name || 'Anonymous')}</span><span>${formatTime(row.seconds)}</span>`;
+        leaderboardListEl.appendChild(li);
+      });
+    }
+  } catch (e) {
+    console.error(e);
+    lbStatusEl.textContent = 'Could not load the leaderboard (check Firestore rules/setup in SETUP-GUIDE.md).';
+  }
+}
+
+/* =========================================================
+   GAME STATE
+   ========================================================= */
+
+let solution = null;
+let puzzle = null;
+let board = null;       // current user-visible board (numbers, 0 = empty)
+let given = null;       // boolean grid: true if pre-filled clue
+let notesGrid = null;   // array of Set per cell
+let selected = null;    // [r,c]
+let notesMode = false;
+let mistakes = 0;
+let hintsLeft = 3;
+let timerInterval = null;
+let seconds = 0;
+let gameOver = false;
+let mode = 'daily';     // 'daily' | 'practice'
+
+const boardEl = document.getElementById('board');
+const numpadEl = document.getElementById('numpad');
+const messageEl = document.getElementById('message');
+const timerEl = document.getElementById('timer');
+const bestTimeEl = document.getElementById('bestTime');
+const mistakesEl = document.getElementById('mistakes');
+const hintsLeftEl = document.getElementById('hintsLeft');
+const notesBtn = document.getElementById('notesBtn');
+const difficultySelect = document.getElementById('difficulty');
+const newGameBtn = document.getElementById('newGameBtn');
+const dailyModeBtn = document.getElementById('dailyModeBtn');
+const practiceModeBtn = document.getElementById('practiceModeBtn');
+const modeNoteEl = document.getElementById('modeNote');
+const leaderboardPanel = document.getElementById('leaderboardPanel');
+const lbDifficultyLabelEl = document.getElementById('lbDifficultyLabel');
+const refreshLbBtn = document.getElementById('refreshLbBtn');
+const playerNameInput = document.getElementById('playerName');
+const leaderboardListEl = document.getElementById('leaderboardList');
+const lbStatusEl = document.getElementById('lbStatus');
+
+document.getElementById('year').textContent = new Date().getFullYear();
+playerNameInput.value = getPlayerName();
+
+function formatTime(secs) {
+  const m = String(Math.floor(secs / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  seconds = 0;
+  timerEl.textContent = '00:00';
+  timerInterval = setInterval(() => {
+    seconds++;
+    timerEl.textContent = formatTime(seconds);
+  }, 1000);
+}
+
+function switchMode(newMode) {
+  if (mode === newMode) return;
+  mode = newMode;
+  dailyModeBtn.classList.toggle('active', mode === 'daily');
+  practiceModeBtn.classList.toggle('active', mode === 'practice');
+  newGameBtn.style.display = mode === 'practice' ? 'inline-block' : 'none';
+  leaderboardPanel.style.display = mode === 'daily' ? 'block' : 'none';
+  newGame();
+}
+
+function newGame() {
+  const difficulty = difficultySelect.value;
+  messageEl.style.color = 'var(--accent-2)';
+  messageEl.textContent = 'Generating puzzle...';
+  // Defer so the message paints before the (synchronous) generation runs
+  setTimeout(() => {
+    let result;
+    if (mode === 'daily') {
+      const rng = mulberry32(hashStringToSeed(`${todayUTCString()}-${difficulty}`));
+      result = makePuzzle(difficulty, rng);
+      modeNoteEl.textContent = `Today's puzzle (${todayUTCString()} UTC) — everyone plays the same grid. Resets at UTC midnight.`;
+    } else {
+      result = makePuzzle(difficulty);
+      modeNoteEl.textContent = 'Unlimited random puzzles — track and beat your personal best.';
+    }
+    solution = result.solution;
+    puzzle = result.puzzle;
+    board = puzzle.map(row => row.slice());
+    given = puzzle.map(row => row.map(v => v !== 0));
+    notesGrid = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => new Set()));
+    selected = null;
+    mistakes = 0;
+    hintsLeft = 3;
+    gameOver = false;
+    notesMode = false;
+    notesBtn.textContent = '✏️ Notes: Off';
+    notesBtn.classList.remove('active');
+    mistakesEl.textContent = '0';
+    hintsLeftEl.textContent = '3';
+    messageEl.textContent = '';
+    updateBestTimeDisplay(difficulty);
+    if (mode === 'daily') loadLeaderboard(difficulty);
+    renderBoard();
+    startTimer();
+  }, 20);
+}
+
+function renderBoard() {
+  boardEl.innerHTML = '';
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      if (r === 2 || r === 5) cell.classList.add('row-thick-bottom');
+
+      const val = board[r][c];
+      if (val !== 0) {
+        cell.textContent = val;
+        if (given[r][c]) cell.classList.add('given');
+      } else if (notesGrid[r][c].size > 0) {
+        const notesDiv = document.createElement('div');
+        notesDiv.className = 'notes';
+        for (let n = 1; n <= 9; n++) {
+          const d = document.createElement('div');
+          d.textContent = notesGrid[r][c].has(n) ? n : '';
+          notesDiv.appendChild(d);
+        }
+        cell.appendChild(notesDiv);
+      }
+
+      cell.addEventListener('click', () => selectCell(r, c));
+      boardEl.appendChild(cell);
+    }
+  }
+  applyHighlights();
+}
+
+function applyHighlights() {
+  const cells = boardEl.querySelectorAll('.cell');
+  cells.forEach(cell => cell.classList.remove('selected', 'peer', 'same-num', 'error'));
+
+  // Re-flag errors persistently
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      if (board[r][c] !== 0 && !given[r][c] && board[r][c] !== solution[r][c]) {
+        getCellEl(r, c).classList.add('error');
+      }
+    }
+  }
+
+  if (!selected) return;
+  const [sr, sc] = selected;
+  const selVal = board[sr][sc];
+
+  cells.forEach(cell => {
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    const sameRow = r === sr, sameCol = c === sc;
+    const sameBox = Math.floor(r / 3) === Math.floor(sr / 3) && Math.floor(c / 3) === Math.floor(sc / 3);
+    if (sameRow || sameCol || sameBox) cell.classList.add('peer');
+    if (selVal !== 0 && board[r][c] === selVal) cell.classList.add('same-num');
+  });
+
+  getCellEl(sr, sc).classList.add('selected');
+}
+
+function getCellEl(r, c) {
+  return boardEl.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
+}
+
+function selectCell(r, c) {
+  if (gameOver) return;
+  selected = [r, c];
+  applyHighlights();
+}
+
+function placeNumber(num) {
+  if (!selected || gameOver) return;
+  const [r, c] = selected;
+  if (given[r][c]) return;
+
+  if (notesMode) {
+    if (board[r][c] !== 0) return;
+    if (notesGrid[r][c].has(num)) notesGrid[r][c].delete(num);
+    else notesGrid[r][c].add(num);
+    renderBoard();
+    selectCell(r, c);
+    return;
+  }
+
+  board[r][c] = num;
+  notesGrid[r][c].clear();
+
+  if (num !== solution[r][c]) {
+    mistakes++;
+    mistakesEl.textContent = mistakes;
+    if (mistakes >= 3) {
+      endGame(false);
+      renderBoard();
+      return;
+    }
+  }
+
+  renderBoard();
+  selectCell(r, c);
+  checkWin();
+}
+
+function eraseCell() {
+  if (!selected || gameOver) return;
+  const [r, c] = selected;
+  if (given[r][c]) return;
+  board[r][c] = 0;
+  notesGrid[r][c].clear();
+  renderBoard();
+  selectCell(r, c);
+}
+
+function giveHint() {
+  if (gameOver || hintsLeft <= 0) return;
+  let target = selected;
+  if (!target || board[target[0]][target[1]] === solution[target[0]][target[1]] && board[target[0]][target[1]] !== 0) {
+    // find a random empty/incorrect cell
+    const candidates = [];
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (board[r][c] !== solution[r][c]) candidates.push([r, c]);
+      }
+    }
+    if (candidates.length === 0) return;
+    target = candidates[Math.floor(Math.random() * candidates.length)];
+  }
+  const [r, c] = target;
+  if (given[r][c]) return;
+  board[r][c] = solution[r][c];
+  notesGrid[r][c].clear();
+  hintsLeft--;
+  hintsLeftEl.textContent = hintsLeft;
+  renderBoard();
+  selectCell(r, c);
+  checkWin();
+}
+
+function checkPuzzle() {
+  let allFilled = true;
+  let anyWrong = false;
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      if (board[r][c] === 0) allFilled = false;
+      else if (board[r][c] !== solution[r][c]) anyWrong = true;
+    }
+  }
+  renderBoard();
+  if (anyWrong) {
+    messageEl.textContent = 'Some entries look incorrect — check the highlighted cells.';
+  } else if (allFilled) {
+    checkWin();
+  } else {
+    messageEl.textContent = 'Looking good so far — keep going!';
+  }
+}
+
+function checkWin() {
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      if (board[r][c] !== solution[r][c]) return false;
+    }
+  }
+  endGame(true);
+  return true;
+}
+
+function saveBestTimeIfBetter(difficulty, secs) {
+  try {
+    const key = `sudoku_best_${difficulty}`;
+    const prev = localStorage.getItem(key);
+    if (!prev || secs < parseInt(prev, 10)) {
+      localStorage.setItem(key, String(secs));
+      return true;
+    }
+  } catch (e) { /* localStorage unavailable, ignore */ }
+  return false;
+}
+
+function getBestTime(difficulty) {
+  try {
+    const v = localStorage.getItem(`sudoku_best_${difficulty}`);
+    return v !== null ? parseInt(v, 10) : null;
+  } catch (e) { return null; }
+}
+
+function updateBestTimeDisplay(difficulty) {
+  const best = getBestTime(difficulty);
+  bestTimeEl.textContent = best !== null ? formatTime(best) : '--:--';
+}
+
+function endGame(won) {
+  gameOver = true;
+  clearInterval(timerInterval);
+  selected = null;
+  if (won) {
+    messageEl.style.color = 'var(--accent-2)';
+    if (mode === 'practice') {
+      const isNewBest = saveBestTimeIfBetter(difficultySelect.value, seconds);
+      updateBestTimeDisplay(difficultySelect.value);
+      messageEl.textContent = `🎉 Solved in ${formatTime(seconds)}!` + (isNewBest ? ' 🏆 New personal best!' : '');
+    } else {
+      messageEl.textContent = `🎉 Solved in ${formatTime(seconds)}! Submitting to today's leaderboard...`;
+      submitScore(difficultySelect.value, seconds);
+    }
+  } else {
+    messageEl.style.color = 'var(--error)';
+    messageEl.textContent = `Out of mistakes! The puzzle is revealed below.`;
+    board = solution.map(row => row.slice());
+  }
+}
+
+/* ---------- Numpad ---------- */
+for (let n = 1; n <= 9; n++) {
+  const btn = document.createElement('button');
+  btn.textContent = n;
+  btn.addEventListener('click', () => placeNumber(n));
+  numpadEl.appendChild(btn);
+}
+
+/* ---------- Controls ---------- */
+newGameBtn.addEventListener('click', newGame);
+document.getElementById('eraseBtn').addEventListener('click', eraseCell);
+document.getElementById('hintBtn').addEventListener('click', giveHint);
+document.getElementById('checkBtn').addEventListener('click', checkPuzzle);
+notesBtn.addEventListener('click', () => {
+  notesMode = !notesMode;
+  notesBtn.textContent = notesMode ? '✏️ Notes: On' : '✏️ Notes: Off';
+  notesBtn.classList.toggle('active', notesMode);
+});
+difficultySelect.addEventListener('change', newGame);
+dailyModeBtn.addEventListener('click', () => switchMode('daily'));
+practiceModeBtn.addEventListener('click', () => switchMode('practice'));
+refreshLbBtn.addEventListener('click', () => loadLeaderboard(difficultySelect.value));
+playerNameInput.addEventListener('change', () => setPlayerName(playerNameInput.value.trim()));
+
+document.addEventListener('keydown', (e) => {
+  if (!selected) return;
+  if (e.key >= '1' && e.key <= '9') placeNumber(parseInt(e.key, 10));
+  else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') eraseCell();
+  else if (e.key === 'ArrowUp') moveSelection(-1, 0);
+  else if (e.key === 'ArrowDown') moveSelection(1, 0);
+  else if (e.key === 'ArrowLeft') moveSelection(0, -1);
+  else if (e.key === 'ArrowRight') moveSelection(0, 1);
+});
+
+function moveSelection(dr, dc) {
+  if (!selected) return;
+  let [r, c] = selected;
+  r = Math.min(8, Math.max(0, r + dr));
+  c = Math.min(8, Math.max(0, c + dc));
+  selectCell(r, c);
+}
+
+/* ---------- Boot ---------- */
+newGameBtn.style.display = mode === 'practice' ? 'inline-block' : 'none';
+leaderboardPanel.style.display = mode === 'daily' ? 'block' : 'none';
+newGame();
+</script>
+
+</body>
+</html>
