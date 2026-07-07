@@ -8,13 +8,12 @@
 
 <!--
   =====================================================================
-  GOOGLE ADSENSE SETUP
-  1. Sign up at https://www.google.com/adsense and get your site approved.
-  2. Replace ca-pub-XXXXXXXXXXXXXXXX below (in <head>) with your publisher ID.
-  3. Replace each data-ad-slot="XXXXXXXXXX" value with the slot ID AdSense
-     gives you when you create each ad unit.
-  4. Everything else (layout, sizing, responsiveness) is already handled.
-  See SETUP-GUIDE.md for full step-by-step instructions.
+  GOOGLE ADSENSE (Auto ads)
+  This site uses Auto ads, so Google places and sizes ad units
+  automatically wherever it decides works best on the page — there is
+  no manual ad markup in the body. Turn Auto ads on/off, or exclude
+  specific page sections, from the AdSense dashboard under
+  Ads > Overview > By site. See SETUP-GUIDE.md for details.
   =====================================================================
 -->
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4107094461564207" crossorigin="anonymous"></script>
@@ -87,53 +86,21 @@
     font-size: 0.95rem;
   }
 
-  /* ---------- Ad slots ---------- */
-  .ad-slot {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: repeating-linear-gradient(45deg, #2a3040, #2a3040 10px, #313849 10px, #313849 20px);
-    border: 1px dashed #545e78;
-    border-radius: 8px;
-    color: #8b93a8;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin: 14px auto;
-    overflow: hidden;
-  }
-  .ad-slot span { opacity: 0.8; }
-  .ad-slot.top-banner { max-width: 728px; height: 90px; }
-  .ad-slot.sidebar { width: 300px; height: 250px; }
-  .ad-slot.footer-banner { max-width: 728px; height: 90px; }
-  .ad-slot.mobile-banner { display: none; width: 100%; max-width: 336px; height: 280px; }
-
   .layout {
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    gap: 20px;
-    max-width: 1100px;
+    max-width: 620px;
     margin: 0 auto;
     padding: 0 12px 40px;
-    flex-wrap: wrap;
   }
 
   .game-column {
     display: flex;
     flex-direction: column;
     align-items: center;
-    flex: 1 1 520px;
+    width: 100%;
     max-width: 520px;
-  }
-
-  .ad-column {
-    flex: 0 0 300px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    padding-top: 40px;
   }
 
   /* ---------- Controls ---------- */
@@ -352,10 +319,6 @@
     padding: 20px 12px 40px;
   }
 
-  @media (max-width: 940px) {
-    .ad-column { display: none; }
-    .ad-slot.mobile-banner { display: flex; margin-top: 20px; }
-  }
 </style>
 </head>
 <body>
@@ -364,20 +327,6 @@
   <h1>Daily Sudoku Challenge</h1>
   <p class="tag">Play today's shared puzzle and see how you rank, or practice with unlimited puzzles.</p>
 </header>
-
-<!-- AD SLOT: Top leaderboard banner (728x90). Replace with your <ins class="adsbygoogle"> unit. -->
-<div class="ad-slot top-banner">
-  <span>Advertisement</span>
-  <!--
-  <ins class="adsbygoogle"
-       style="display:block"
-       data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
-       data-ad-slot="XXXXXXXXXX"
-       data-ad-format="horizontal"
-       data-full-width-responsive="true"></ins>
-  <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-  -->
-</div>
 
 <div class="layout">
   <div class="game-column">
@@ -432,34 +381,8 @@
       <p id="lbStatus" class="lb-status"></p>
     </div>
 
-    <!-- AD SLOT: Mobile banner, shown only on small screens -->
-    <div class="ad-slot mobile-banner">
-      <span>Advertisement</span>
-    </div>
-
   </div>
 
-  <div class="ad-column">
-    <!-- AD SLOT: Sidebar 300x250, desktop only -->
-    <div class="ad-slot sidebar">
-      <span>Advertisement</span>
-      <!--
-      <ins class="adsbygoogle"
-           style="display:inline-block;width:300px;height:250px"
-           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
-           data-ad-slot="XXXXXXXXXX"></ins>
-      <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
-      -->
-    </div>
-    <div class="ad-slot sidebar">
-      <span>Advertisement</span>
-    </div>
-  </div>
-</div>
-
-<!-- AD SLOT: Bottom banner before footer -->
-<div class="ad-slot footer-banner">
-  <span>Advertisement</span>
 </div>
 
 <footer>
@@ -1049,35 +972,4 @@ notesBtn.addEventListener('click', () => {
   notesBtn.textContent = notesMode ? '✏️ Notes: On' : '✏️ Notes: Off';
   notesBtn.classList.toggle('active', notesMode);
 });
-difficultySelect.addEventListener('change', newGame);
-dailyModeBtn.addEventListener('click', () => switchMode('daily'));
-practiceModeBtn.addEventListener('click', () => switchMode('practice'));
-refreshLbBtn.addEventListener('click', () => loadLeaderboard(difficultySelect.value));
-playerNameInput.addEventListener('change', () => setPlayerName(playerNameInput.value.trim()));
-
-document.addEventListener('keydown', (e) => {
-  if (!selected) return;
-  if (e.key >= '1' && e.key <= '9') placeNumber(parseInt(e.key, 10));
-  else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') eraseCell();
-  else if (e.key === 'ArrowUp') moveSelection(-1, 0);
-  else if (e.key === 'ArrowDown') moveSelection(1, 0);
-  else if (e.key === 'ArrowLeft') moveSelection(0, -1);
-  else if (e.key === 'ArrowRight') moveSelection(0, 1);
-});
-
-function moveSelection(dr, dc) {
-  if (!selected) return;
-  let [r, c] = selected;
-  r = Math.min(8, Math.max(0, r + dr));
-  c = Math.min(8, Math.max(0, c + dc));
-  selectCell(r, c);
-}
-
-/* ---------- Boot ---------- */
-newGameBtn.style.display = mode === 'practice' ? 'inline-block' : 'none';
-leaderboardPanel.style.display = mode === 'daily' ? 'block' : 'none';
-newGame();
-</script>
-
-</body>
-</html>
+difficultySelect.addEventListener('cha
