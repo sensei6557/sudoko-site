@@ -949,7 +949,7 @@ function endGame(won) {
     }
   } else {
     messageEl.style.color = 'var(--error)';
-    messageEl.textContent = `Out of mistakes! The puzzle is revealed below.`;
+    messageEl.textContent = `Out of mistakes! The puzzle is revealed.`;
     board = solution.map(row => row.slice());
   }
 }
